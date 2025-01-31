@@ -1,5 +1,10 @@
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:gup_chup/widget/user_image.dart';
 
 final _firebase = FirebaseAuth.instance;
 
@@ -18,21 +23,37 @@ class _AuthScreenState extends State<AuthScreen> {
   final _form = GlobalKey<FormState>();
   var _enteredEmail = '';
   var _enteredPassword = '';
+  File? selectedImage;
+  var _enteredUsername = '';
 
   void _onSaved() async {
     final states = _form.currentState!.validate();
-    if (!states) {
+    if (!states || (!_isLogin && selectedImage == null)) {
       return;
     }
     _form.currentState!.save();
 
     try {
       if (_isLogin) {
-        final usercred = await _firebase.signInWithEmailAndPassword(
+        await _firebase.signInWithEmailAndPassword(
             email: _enteredEmail, password: _enteredPassword);
       } else {
-        final userCredential = await _firebase.createUserWithEmailAndPassword(
+        final userCred = await _firebase.createUserWithEmailAndPassword(
             email: _enteredEmail, password: _enteredPassword);
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('user_image')
+            .child('${userCred.user!.uid}.jpg');
+        await storageRef.putFile(selectedImage!);
+        final imageUrl = await storageRef.getDownloadURL();
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCred.user!.uid)
+            .set({
+          'username': _enteredUsername,
+          'email Addres': _enteredEmail,
+          'imageUrl': imageUrl
+        });
       }
     } on FirebaseAuthException catch (error) {
       if (error.code == 'email-already-in-use') {}
@@ -74,6 +95,12 @@ class _AuthScreenState extends State<AuthScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (!_isLogin)
+                            UserInputImage(
+                              onpickedImage: (pickedImage) {
+                                selectedImage = pickedImage;
+                              },
+                            ),
                           TextFormField(
                             decoration:
                                 InputDecoration(label: Text('Email Address')),
@@ -92,6 +119,26 @@ class _AuthScreenState extends State<AuthScreen> {
                           ),
                           const SizedBox(
                             height: 8,
+                          ),
+                          if (!_isLogin)
+                            TextFormField(
+                              validator: (value) {
+                                if (value == null ||
+                                    value.isEmpty ||
+                                    value.trim().length < 4) {
+                                  return 'enter a valid username  ';
+                                }
+                                return null;
+                              },
+                              decoration: InputDecoration(
+                                label: Text('username'),
+                              ),
+                              onSaved: (value) {
+                                _enteredUsername = value!;
+                              },
+                            ),
+                          const SizedBox(
+                            height: 4,
                           ),
                           TextFormField(
                             decoration: InputDecoration(
